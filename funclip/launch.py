@@ -123,7 +123,7 @@ if __name__ == "__main__":
         if model.startswith('gpt') or model.startswith('moonshot'):
             return openai_call(apikey, model, system_content, user_content + '\n' + srt_text)
         elif model.startswith('g4f'):
-            model_path = "C:/Users/saura/.cache/lm-studio/models/lmstudio-community/" + "-".join(model.split('-')[1:])
+            model_path = "C:\Users\saura\.cache\lm-studio\models\lmstudio-community\Qwen2.5-14B-Instruct-1M-GGUF\Qwen2.5-14B-Instruct-1M-Q4_K_M.gguf" + "-".join(model.split('-')[1:])
             return g4f_openai_call(model_path, system_content, user_content + '\n' + srt_text)
         else:
             logging.error("LLM name error, only {} are supported as LLM name prefix."
