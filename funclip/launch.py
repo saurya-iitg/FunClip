@@ -119,11 +119,12 @@ if __name__ == "__main__":
     def llm_inference(system_content, user_content, srt_text, model, apikey):
         SUPPORT_LLM_PREFIX = ['qwen', 'gpt', 'g4f', 'moonshot']
         if model.startswith('qwen'):
-            return call_local_model(model, user_content + '\n' + srt_text, system_content)  # Updated function call
+            return call_local_model(model, user_content + '\n' + srt_text, system_content)
         if model.startswith('gpt') or model.startswith('moonshot'):
             return openai_call(apikey, model, system_content, user_content + '\n' + srt_text)
         elif model.startswith('g4f'):
-            model_path = "C:\Users\saura\.cache\lm-studio\models\lmstudio-community\Qwen2.5-14B-Instruct-1M-GGUF\Qwen2.5-14B-Instruct-1M-Q4_K_M.gguf" + "-".join(model.split('-')[1:])
+            # Correct the model path
+            model_path = f"C:\\Users\\saura\\.cache\\lm-studio\\models\\lmstudio-community\\{model}"
             return g4f_openai_call(model_path, system_content, user_content + '\n' + srt_text)
         else:
             logging.error("LLM name error, only {} are supported as LLM name prefix."
@@ -164,6 +165,16 @@ if __name__ == "__main__":
                 dest_text, start_ost, end_ost, audio_state, 
                 dest_spk=video_spk_input, output_dir=output_dir, timestamp_list=timestamp_list, add_sub=True)
             return None, (sr, res_audio), message, clip_srt
+    
+    def get_available_models():
+        model_dir = r"C:\Users\saura\.cache\lm-studio\models\lmstudio-community"
+        try:
+            # List all directories in the model directory
+            models = [name for name in os.listdir(model_dir) if os.path.isdir(os.path.join(model_dir, name))]
+            return models
+        except FileNotFoundError:
+            logging.error(f"Model directory not found: {model_dir}")
+            return []
     
     # gradio interface
     theme = gr.Theme.load("funclip/utils/theme.json")
