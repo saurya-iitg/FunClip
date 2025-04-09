@@ -31,7 +31,7 @@ def g4f_openai_call(model: str, user_content: str, system_content: Optional[str]
             "messages": messages,
             "model": model,
             "temperature": 0.7,
-            "max_tokens": 2000
+            "max_tokens": 100000
         }
         
         # Make API call
