@@ -20,7 +20,42 @@ from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
 from utils.subtitle_utils import generate_srt, generate_srt_clip
 from utils.argparse_tools import ArgumentParser, get_commandline_args
 from utils.trans_utils import pre_proc, proc, write_state, load_state, proc_spk, convert_pcm_to_float
+import whisper
+import torch
+import numpy as np
+import librosa
+import logging
 
+# Cache for loaded Whisper models so they are only loaded once
+_whisper_models = {}
+
+def get_whisper_model(version="base"):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if version not in _whisper_models:
+        logging.info(f"Loading Whisper model '{version}' on {device}...")
+        _whisper_models[version] = whisper.load_model(version, device=device)
+    return _whisper_models[version]
+
+def whisper_recog(audio_input, version="base"):
+    """
+    Recognize speech using OpenAI Whisper.
+    Loads the given Whisper model version using CUDA if available.
+    Note: The vanilla Whisper model returns coarse timestamps.
+          For improved alignment consider integrating WhisperX.
+    """
+    sr, data = audio_input
+    # Ensure audio is float32 and resample to 16000 if needed
+    if data.dtype != np.float32:
+        data = data.astype(np.float32)
+    if sr != 16000:
+        data = librosa.resample(data, orig_sr=sr, target_sr=16000)
+        sr = 16000
+
+    model = get_whisper_model(version)
+    result = model.transcribe(data, language="en", fp16=torch.cuda.is_available())
+    logging.info("Whisper transcription complete.")
+    # (Optional) Postprocess result["segments"] to generate an SRT with timestamps.
+    return result["text"]
 
 class VideoClipper():
     def __init__(self, funasr_model):
@@ -231,6 +266,8 @@ class VideoClipper():
             srt_clip, subs, srt_index = generate_srt_clip(sentences, start, end, begin_index=srt_index, time_acc_ost=time_acc_ost)
             start, end = start+start_ost/1000.0, end+end_ost/1000.0
             video_clip = video.subclip(start, end)
+            # Resize to a vertical (9:16) format, e.g., width 1080, height 1920:
+            video_clip = video_clip.resize(newsize=(1080,1920))
             start_end_info = "from {} to {}".format(start, end)
             clip_srt += srt_clip
             if add_sub:
@@ -250,6 +287,8 @@ class VideoClipper():
                     chi_subs.append(((sub[0][0]-sub_starts, sub[0][1]-sub_starts), sub[1]))
                 start, end = start+start_ost/1000.0, end+end_ost/1000.0
                 _video_clip = video.subclip(start, end)
+                # Resize to a vertical (9:16) format, e.g., width 1080, height 1920:
+                _video_clip = _video_clip.resize(newsize=(1080,1920))
                 start_end_info += ", from {} to {}".format(str(start)[:5], str(end)[:5])
                 clip_srt += srt_clip
                 if add_sub:

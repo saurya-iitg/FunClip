@@ -10,19 +10,17 @@ if __name__ == '__main__':
     from llm.demo_prompt import demo_prompt
     client = Client()
     response = client.chat.completions.create(
-        model="Qwen2.5 7B Instruct 1M",
+        model="qwen2.5 7b instruct 1m",
         messages=[{"role": "user", "content": "你好你的名字是什么"}],
     )
     print(response.choices[0].message.content)
- 
 
 def g4f_openai_call(model: str, user_content: str, system_content: Optional[str] = None) -> str:
     """Call LMStudio local server API"""
     try:
-        # LMStudio server URL
         url = "http://localhost:1234/v1/chat/completions"
         
-        # Prepare messages
+        # Prepare messages according to LMStudio's format
         messages = []
         if system_content and system_content.strip():
             messages.append({
@@ -34,9 +32,8 @@ def g4f_openai_call(model: str, user_content: str, system_content: Optional[str]
             "content": user_content.strip()
         })
         
-        # API request payload matching LMStudio's format
         payload = {
-            "model": model.lower(),  # Model name must be lowercase
+            "model": model.lower(),  # Must be lowercase
             "messages": messages,
             "temperature": 0.7,
             "max_tokens": -1,  # -1 means no limit
@@ -48,7 +45,6 @@ def g4f_openai_call(model: str, user_content: str, system_content: Optional[str]
         }
         
         logging.info(f"Sending request to LMStudio with payload: {payload}")
-        
         response = requests.post(url, json=payload, headers=headers)
         
         if response.status_code != 200:

@@ -27,17 +27,19 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     if args.lang == 'zh':
-        funasr_model = AutoModel(model="iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
-                                vad_model="damo/speech_fsmn_vad_zh-cn-16k-common-pytorch",
-                                punc_model="damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
-                                spk_model="damo/speech_campplus_sv_zh-cn_16k-common",
-                                )
+        funasr_model = AutoModel(
+            model="iic/speech_seaco_paraformer_large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+            vad_model="damo/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+            punc_model="damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
+            spk_model="damo/speech_campplus_sv_zh-cn-16k-common",
+        )
     else:
-        funasr_model = AutoModel(model="iic/speech_paraformer_asr-en-16k-vocab4199-pytorch",
-                                vad_model="damo/speech_fsmn_vad_zh-cn-16k-common-pytorch",
-                                punc_model="damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
-                                spk_model="damo/speech_campplus_sv_zh-cn_16k-common",
-                                )
+        funasr_model = AutoModel(
+            model="iic/speech_paraformer_asr-en-16k-vocab4199-pytorch",
+            vad_model="damo/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+            punc_model="damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
+            spk_model=None  # Disable speaker model for English
+        )
     audio_clipper = VideoClipper(funasr_model)
     audio_clipper.lang = args.lang
     
@@ -47,8 +49,17 @@ if __name__ == "__main__":
         
         
 
-    def audio_recog(audio_input, sd_switch, hotwords, output_dir):
-        return audio_clipper.recog(audio_input, sd_switch, None, hotwords, output_dir=output_dir)
+    def audio_recog(audio_input, sd_switch, hotwords, output_dir, asr_model="funasr"):
+        if asr_model.startswith("whisper"):
+            # The format is "whisper-base", "whisper-small", etc.
+            version = asr_model.split("-")[1]  
+            recognized_text = whisper_recog(audio_input, version=version)
+            res_srt = ""
+            state = {"audio_input": audio_input}
+            return recognized_text, res_srt, state
+        else:
+            # Use the original FunASR-based recognition
+            return audio_clipper.recog(audio_input, sd_switch, None, hotwords, output_dir=output_dir)
 
     def video_recog(video_input, sd_switch, hotwords, output_dir):
         return audio_clipper.video_recog(video_input, sd_switch, hotwords, output_dir=output_dir)
@@ -58,20 +69,14 @@ if __name__ == "__main__":
             dest_text, start_ost, end_ost, state, dest_spk=video_spk_input, output_dir=output_dir
             )
 
-    def mix_recog(video_input, audio_input, hotwords, output_dir):
+    def mix_recog(video_input, audio_input, hotwords, output_dir, asr_model):
         output_dir = output_dir.strip()
-        if not len(output_dir):
-            output_dir = None
-        else:
-            output_dir = os.path.abspath(output_dir)
-        audio_state, video_state = None, None
+        output_dir = None if not len(output_dir) else os.path.abspath(output_dir)
         if video_input is not None:
-            res_text, res_srt, video_state = video_recog(
-                video_input, 'No', hotwords, output_dir=output_dir)
+            res_text, res_srt, video_state = video_recog(video_input, 'No', hotwords, output_dir=output_dir)
             return res_text, res_srt, video_state, None
         if audio_input is not None:
-            res_text, res_srt, audio_state = audio_recog(
-                audio_input, 'No', hotwords, output_dir=output_dir)
+            res_text, res_srt, audio_state = audio_recog(audio_input, 'No', hotwords, output_dir=output_dir, asr_model=asr_model)
             return res_text, res_srt, None, audio_state
     
     def mix_recog_speaker(video_input, audio_input, hotwords, output_dir):
@@ -120,27 +125,21 @@ if __name__ == "__main__":
     def llm_inference(system_content, user_content, srt_text, model, apikey):
         """Handle different model types including LMStudio local models"""
         try:
-            # Get available LMStudio models
             lmstudio_models = get_available_models()
             logging.info(f"Available models: {lmstudio_models}")
             
-            # Combine content
             combined_content = user_content + '\n' + srt_text
             
-            # Handle different model types
             if model.lower() in [m.lower() for m in lmstudio_models]:
-                # Use local LMStudio model - ensure model name is in correct case
                 actual_model = next(m for m in lmstudio_models if m.lower() == model.lower())
                 logging.info(f"Using local model: {actual_model}")
                 return g4f_openai_call(actual_model, combined_content, system_content)
             elif model.startswith('gpt') or model.startswith('moonshot'):
-                # Use OpenAI API
                 return openai_call(apikey, model, system_content, combined_content)
             else:
                 error_msg = f"Unsupported model: {model}. Available models: {lmstudio_models}"
                 logging.error(error_msg)
                 return error_msg
-                
         except Exception as e:
             error_msg = f"LLM inference error: {str(e)}"
             logging.error(error_msg)
@@ -188,7 +187,6 @@ if __name__ == "__main__":
             response = requests.get("http://localhost:1234/v1/models")
             if response.status_code == 200:
                 models = response.json()
-                # Extract model IDs and ensure they're in the correct format
                 available_models = [model["id"].lower() for model in models.get("data", [])]
                 logging.info(f"Available models: {available_models}")
                 return available_models
@@ -228,6 +226,11 @@ if __name__ == "__main__":
                             # video_sd_switch = gr.Radio(["No", "Yes"], label="👥区分说话人 Get Speakers", value='No')
                         hotwords_input = gr.Textbox(label="🚒 热词 | Hotwords(可以为空，多个热词使用空格分隔，仅支持中文热词)")
                         output_dir = gr.Textbox(label="📁 文件输出路径 | File Output Dir (可以为空，Linux, mac系统可以稳定使用)", value=" ")
+                        asr_model = gr.Dropdown(
+                            choices=["funasr", "whisper-base", "whisper-small", "whisper-medium", "whisper-large"],
+                            value="funasr",
+                            label="ASR Model"
+                        )
                         with gr.Row():
                             recog_button = gr.Button("👂 识别 | ASR", variant="primary")
                             recog_button2 = gr.Button("👂👫 识别+区分说话人 | ASR+SD")
@@ -236,7 +239,14 @@ if __name__ == "__main__":
             with gr.Column():
                 with gr.Tab("🧠 LLM智能裁剪 | LLM Clipping"):
                     with gr.Column():
-                        prompt_head = gr.Textbox(label="Prompt System (按需更改，最好不要变动主体和要求)", value=("“You are a video srt subtitles analyzer and editor. Input the srt subtitles of the video, analyze the wonderful and as continuous as possible segments and cut them out, output no more than four segments, merge multiple sentences and their timestamps that are continuous in time into one, and make sure that the text and timestamps match correctly. The output must strictly follow the following format: 1. [start time-end time] text, note that the connector is "-"”"))
+                        prompt_head = gr.Textbox(
+                            label="Prompt System (Customize as needed, do not change the main instructions)",
+                            value="""You are a video SRT subtitles analyzer and editor. 
+Input the video's SRT subtitles, analyze them to identify the most interesting and continuous segments, 
+and then cut out those segments. Output no more than four segments and merge any consecutive sentences 
+and their timestamps into one segment. Ensure that the text matches the timestamps correctly. 
+The output must strictly follow this format: 1. [start time-end time] text, note that the connector is "-"."""
+                        )
                         prompt_head2 = gr.Textbox(label="Prompt User（不需要修改，会自动拼接左下角的srt字幕）", value=("This is the video srt subtitles to be cropped："))
                         with gr.Column():
                             with gr.Row():
@@ -275,7 +285,7 @@ if __name__ == "__main__":
                                     audio_input, 
                                     hotwords_input, 
                                     output_dir,
-                                    ], 
+                                    asr_model], 
                             outputs=[video_text_output, video_srt_output, video_state, audio_state])
         recog_button2.click(mix_recog_speaker, 
                             inputs=[video_input, 
