@@ -11,7 +11,7 @@ import gradio as gr
 from funasr import AutoModel
 from videoclipper import VideoClipper
 from llm.openai_api import openai_call
-from llm.qwen_api import call_qwen_model
+from llm.qwen_api import call_local_model  #call_qwen_model,   # Corrected import
 from llm.g4f_openai_api import g4f_openai_call
 from utils.trans_utils import extract_timestamps
 from introduction import top_md_1, top_md_3, top_md_4
@@ -19,7 +19,7 @@ from introduction import top_md_1, top_md_3, top_md_4
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='argparse testing')
-    parser.add_argument('--lang', '-l', type=str, default = "zh", help="language")
+    parser.add_argument('--lang', '-l', type=str, default = "en", help="language")
     parser.add_argument('--share', '-s', action='store_true', help="if to establish gradio share link")
     parser.add_argument('--port', '-p', type=int, default=7860, help='port number')
     parser.add_argument('--listen', action='store_true', help="if to listen to all hosts")
@@ -119,11 +119,10 @@ if __name__ == "__main__":
     def llm_inference(system_content, user_content, srt_text, model, apikey):
         SUPPORT_LLM_PREFIX = ['qwen', 'gpt', 'g4f', 'moonshot']
         if model.startswith('qwen'):
-            return call_qwen_model(apikey, model, user_content + '\n' + srt_text, system_content)
+            return call_local_model(model, user_content + '\n' + srt_text, system_content)  # Updated function call
         if model.startswith('gpt') or model.startswith('moonshot'):
             return openai_call(apikey, model, system_content, user_content + '\n' + srt_text)
         elif model.startswith('g4f'):
-            # Ensure the model path is correctly passed for local LLM Studio
             model_path = "C:/Users/saura/.cache/lm-studio/models/lmstudio-community/" + "-".join(model.split('-')[1:])
             return g4f_openai_call(model_path, system_content, user_content + '\n' + srt_text)
         else:
