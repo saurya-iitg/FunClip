@@ -119,12 +119,13 @@ if __name__ == "__main__":
     def llm_inference(system_content, user_content, srt_text, model, apikey):
         SUPPORT_LLM_PREFIX = ['qwen', 'gpt', 'g4f', 'moonshot']
         if model.startswith('qwen'):
-            return call_qwen_model(apikey, model, user_content+'\n'+srt_text, system_content)
+            return call_qwen_model(apikey, model, user_content + '\n' + srt_text, system_content)
         if model.startswith('gpt') or model.startswith('moonshot'):
-            return openai_call(apikey, model, system_content, user_content+'\n'+srt_text)
+            return openai_call(apikey, model, system_content, user_content + '\n' + srt_text)
         elif model.startswith('g4f'):
-            model = "-".join(model.split('-')[1:])
-            return g4f_openai_call(model, system_content, user_content+'\n'+srt_text)
+            # Ensure the model path is correctly passed for local LLM Studio
+            model_path = "C:/Users/saura/.cache/lm-studio/models/lmstudio-community/" + "-".join(model.split('-')[1:])
+            return g4f_openai_call(model_path, system_content, user_content + '\n' + srt_text)
         else:
             logging.error("LLM name error, only {} are supported as LLM name prefix."
                           .format(SUPPORT_LLM_PREFIX))
@@ -210,14 +211,17 @@ if __name__ == "__main__":
                         with gr.Column():
                             with gr.Row():
                                 llm_model = gr.Dropdown(
-                                    choices=["qwen-plus",
-                                             "gpt-3.5-turbo", 
-                                             "gpt-3.5-turbo-0125", 
-                                             "gpt-4-turbo",
-                                             "g4f-gpt-3.5-turbo"], 
+                                    choices=[
+                                        "qwen-plus",
+                                        "gpt-3.5-turbo",
+                                        "gpt-3.5-turbo-0125",
+                                        "gpt-4-turbo",
+                                        "g4f-Qwen2.5-7B-Instruct-1M"  # Add the local model name
+                                    ],
                                     value="qwen-plus",
                                     label="LLM Model Name",
-                                    allow_custom_value=True)
+                                    allow_custom_value=True
+                                )
                                 apikey_input = gr.Textbox(label="APIKEY")
                             llm_button =  gr.Button("LLM推理 | LLM Inference（首先进行识别，非g4f需配置对应apikey）", variant="primary")
                         llm_result = gr.Textbox(label="LLM Clipper Result")
