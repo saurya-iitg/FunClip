@@ -1,3 +1,6 @@
+import logging
+import requests
+from typing import Optional
 from g4f.client import Client
 from lmstudio import llm  # Import the local model library
 
@@ -11,27 +14,34 @@ if __name__ == '__main__':
     print(response.choices[0].message.content)
  
 
-def g4f_openai_call(model, user_content, system_content=None):
+def g4f_openai_call(model: str, user_content: str, system_content: Optional[str] = None) -> str:
+    """Call LMStudio local server API"""
     try:
-        # Initialize the local model
-        local_model = llm(model)
+        # LMStudio server URL
+        url = "http://127.0.0.1:1234/v1/chat/completions"
         
-        # Prepare the messages for the local model
-        if system_content is not None and len(system_content.strip()):
-            messages = [
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content}
-            ]
-        else:
-            messages = [
-                {"role": "user", "content": user_content}
-            ]
+        # Prepare messages
+        messages = []
+        if system_content and system_content.strip():
+            messages.append({"role": "system", "content": system_content})
+        messages.append({"role": "user", "content": user_content})
         
-        # Call the local model with the prepared messages
-        result = local_model.chat(messages)
+        # API request payload
+        payload = {
+            "messages": messages,
+            "model": model,
+            "temperature": 0.7,
+            "max_tokens": 2000
+        }
         
-        # Return the content of the response
-        return result.message.content
+        # Make API call
+        response = requests.post(url, json=payload)
+        response.raise_for_status()
+        
+        # Extract and return response content
+        result = response.json()
+        return result['choices'][0]['message']['content']
+        
     except Exception as e:
-        logging.error(f"Failed to load or call the model: {model}. Error: {e}")
-        return f"Error: {e}"
+        logging.error(f"Failed to call LMStudio API: {str(e)}")
+        return f"Error: {str(e)}"

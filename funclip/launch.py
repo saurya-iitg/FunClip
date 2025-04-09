@@ -15,6 +15,7 @@ from llm.qwen_api import call_local_model  #call_qwen_model,   # Corrected impor
 from llm.g4f_openai_api import g4f_openai_call
 from utils.trans_utils import extract_timestamps
 from introduction import top_md_1, top_md_3, top_md_4
+import requests
 
 
 if __name__ == "__main__":
@@ -117,18 +118,28 @@ if __name__ == "__main__":
             )
         
     def llm_inference(system_content, user_content, srt_text, model, apikey):
-        SUPPORT_LLM_PREFIX = ['qwen', 'gpt', 'g4f', 'moonshot']
-        if model.startswith('qwen'):
-            return call_local_model(model, user_content + '\n' + srt_text, system_content)
-        if model.startswith('gpt') or model.startswith('moonshot'):
-            return openai_call(apikey, model, system_content, user_content + '\n' + srt_text)
-        elif model.startswith('g4f'):
-            # Correct the model path
-            model_path = f"C:\\Users\\saura\\.cache\\lm-studio\\models\\lmstudio-community\\{model}"
-            return g4f_openai_call(model_path, system_content, user_content + '\n' + srt_text)
-        else:
-            logging.error("LLM name error, only {} are supported as LLM name prefix."
-                          .format(SUPPORT_LLM_PREFIX))
+        """Handle different model types including LMStudio local models"""
+        try:
+            # Get available LMStudio models
+            lmstudio_models = get_available_models()
+            
+            # Combine content
+            combined_content = user_content + '\n' + srt_text
+            
+            # Handle different model types
+            if model in lmstudio_models:
+                # Use local LMStudio model
+                return g4f_openai_call(model, combined_content, system_content)
+            elif model.startswith('gpt') or model.startswith('moonshot'):
+                # Use OpenAI API
+                return openai_call(apikey, model, system_content, combined_content)
+            else:
+                logging.error(f"Unsupported model: {model}")
+                return f"Error: Unsupported model {model}"
+                
+        except Exception as e:
+            logging.error(f"LLM inference error: {str(e)}")
+            return f"Error: {str(e)}"
     
     def AI_clip(LLM_res, dest_text, video_spk_input, start_ost, end_ost, video_state, audio_state, output_dir):
         timestamp_list = extract_timestamps(LLM_res)
@@ -167,13 +178,15 @@ if __name__ == "__main__":
             return None, (sr, res_audio), message, clip_srt
     
     def get_available_models():
-        model_dir = r"C:\Users\saura\.cache\lm-studio\models\lmstudio-community"
+        """Get list of available models from LMStudio server"""
         try:
-            # List all directories in the model directory
-            models = [name for name in os.listdir(model_dir) if os.path.isdir(os.path.join(model_dir, name))]
-            return models
-        except FileNotFoundError:
-            logging.error(f"Model directory not found: {model_dir}")
+            response = requests.get("http://127.0.0.1:1234/v1/models")
+            if response.status_code == 200:
+                models = response.json()
+                return [model["id"] for model in models["data"]]
+            return []
+        except Exception as e:
+            logging.error(f"Failed to fetch models from LMStudio: {str(e)}")
             return []
     
     # gradio interface
@@ -221,16 +234,10 @@ if __name__ == "__main__":
                         with gr.Column():
                             with gr.Row():
                                 llm_model = gr.Dropdown(
-                                    choices=[
-                                        "qwen-plus",
-                                        "gpt-3.5-turbo",
-                                        "gpt-3.5-turbo-0125",
-                                        "gpt-4-turbo",
-                                        "g4f-Qwen2.5-7B-Instruct-1M"  # Add the local model name
-                                    ],
-                                    value="qwen-plus",
+                                    choices=["gpt-3.5-turbo", "gpt-4"] + get_available_models(),  # Combine API models with local models
+                                    value=get_available_models()[0] if get_available_models() else "gpt-3.5-turbo",
                                     label="LLM Model Name",
-                                    allow_custom_value=True
+                                    allow_custom_value=False
                                 )
                                 apikey_input = gr.Textbox(label="APIKEY")
                             llm_button =  gr.Button("LLM推理 | LLM Inference（首先进行识别，非g4f需配置对应apikey）", variant="primary")
