@@ -1,7 +1,8 @@
+#local_llm_studio.py
 import lmstudio as lms
 
 def call_local_model(
-    model="llama-3.2-1b-instruct",  # Replace with your loaded model in LM Studio
+    model="C:/Users/saura/.cache/lm-studio/models/lmstudio-community/Qwen2.5-7B-Instruct-1M-GGUF",  # Replace with your loaded model in LM Studio
     user_content="如何做西红柿炖牛腩？", 
     system_content=None
 ):
