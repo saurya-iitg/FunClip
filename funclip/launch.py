@@ -122,24 +122,29 @@ if __name__ == "__main__":
         try:
             # Get available LMStudio models
             lmstudio_models = get_available_models()
+            logging.info(f"Available models: {lmstudio_models}")
             
             # Combine content
             combined_content = user_content + '\n' + srt_text
             
             # Handle different model types
-            if model in lmstudio_models:
-                # Use local LMStudio model
-                return g4f_openai_call(model, combined_content, system_content)
+            if model.lower() in [m.lower() for m in lmstudio_models]:
+                # Use local LMStudio model - ensure model name is in correct case
+                actual_model = next(m for m in lmstudio_models if m.lower() == model.lower())
+                logging.info(f"Using local model: {actual_model}")
+                return g4f_openai_call(actual_model, combined_content, system_content)
             elif model.startswith('gpt') or model.startswith('moonshot'):
                 # Use OpenAI API
                 return openai_call(apikey, model, system_content, combined_content)
             else:
-                logging.error(f"Unsupported model: {model}")
-                return f"Error: Unsupported model {model}"
+                error_msg = f"Unsupported model: {model}. Available models: {lmstudio_models}"
+                logging.error(error_msg)
+                return error_msg
                 
         except Exception as e:
-            logging.error(f"LLM inference error: {str(e)}")
-            return f"Error: {str(e)}"
+            error_msg = f"LLM inference error: {str(e)}"
+            logging.error(error_msg)
+            return error_msg
     
     def AI_clip(LLM_res, dest_text, video_spk_input, start_ost, end_ost, video_state, audio_state, output_dir):
         timestamp_list = extract_timestamps(LLM_res)
@@ -180,10 +185,14 @@ if __name__ == "__main__":
     def get_available_models():
         """Get list of available models from LMStudio server"""
         try:
-            response = requests.get("http://127.0.0.1:1234/v1/models")
+            response = requests.get("http://localhost:1234/v1/models")
             if response.status_code == 200:
                 models = response.json()
-                return [model["id"] for model in models["data"]]
+                # Extract model IDs and ensure they're in the correct format
+                available_models = [model["id"].lower() for model in models.get("data", [])]
+                logging.info(f"Available models: {available_models}")
+                return available_models
+            logging.warning(f"Failed to get models from LMStudio server: {response.status_code}")
             return []
         except Exception as e:
             logging.error(f"Failed to fetch models from LMStudio: {str(e)}")
@@ -227,14 +236,12 @@ if __name__ == "__main__":
             with gr.Column():
                 with gr.Tab("🧠 LLM智能裁剪 | LLM Clipping"):
                     with gr.Column():
-                        prompt_head = gr.Textbox(label="Prompt System (按需更改，最好不要变动主体和要求)", value=("你是一个视频srt字幕分析剪辑器，输入视频的srt字幕，"
-                                "分析其中的精彩且尽可能连续的片段并裁剪出来，输出四条以内的片段，将片段中在时间上连续的多个句子及它们的时间戳合并为一条，"
-                                "注意确保文字与时间戳的正确匹配。输出需严格按照如下格式：1. [开始时间-结束时间] 文本，注意其中的连接符是“-”"))
-                        prompt_head2 = gr.Textbox(label="Prompt User（不需要修改，会自动拼接左下角的srt字幕）", value=("这是待裁剪的视频srt字幕："))
+                        prompt_head = gr.Textbox(label="Prompt System (按需更改，最好不要变动主体和要求)", value=("“You are a video srt subtitles analyzer and editor. Input the srt subtitles of the video, analyze the wonderful and as continuous as possible segments and cut them out, output no more than four segments, merge multiple sentences and their timestamps that are continuous in time into one, and make sure that the text and timestamps match correctly. The output must strictly follow the following format: 1. [start time-end time] text, note that the connector is "-"”"))
+                        prompt_head2 = gr.Textbox(label="Prompt User（不需要修改，会自动拼接左下角的srt字幕）", value=("This is the video srt subtitles to be cropped："))
                         with gr.Column():
                             with gr.Row():
                                 llm_model = gr.Dropdown(
-                                    choices=["gpt-3.5-turbo", "gpt-4"] + get_available_models(),  # Combine API models with local models
+                                    choices=["gpt-3.5-turbo", "gpt-4"] + get_available_models(),
                                     value=get_available_models()[0] if get_available_models() else "gpt-3.5-turbo",
                                     label="LLM Model Name",
                                     allow_custom_value=False
